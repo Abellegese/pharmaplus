@@ -9,7 +9,24 @@ pip install git+https://github.com/SeonghwanSeo/PharmacoNet.git
 ``` 
 2. Download the artifact folder `.tar.gz` (contains, PDBBind data, cached processed data ready for training and evaluation and some checkpoints) from this link and exract it in a project root. The extracted folder should have the name `artifact`.
 
-#### How to use the CLI
+3. Quickly run this to evaluate
+```bash
+ pharmaplus visualize \
+  --ckpt artifacts/checkpoints/_runs_fast_retr_v2/best.pt \
+  --item-pt artifacts/data/cache_pt_full/00000042.pt \
+  --other-dir artifacts/data/cache_pt_full \
+  --device cuda:0 \
+  --amp \
+  --n-confs 50 \
+  --optimize \
+  --lambda-retr 0.8  \
+  --match-topn 50 \
+  --match-thresh 0.01 \
+  --out-dir out/00000042_vs_00000125
+```
+
+
+#### CLI commands
 
 | Subcommand | One “everything included” command                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
