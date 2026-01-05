@@ -1,11 +1,13 @@
 ### Pharamaplus
+A project to enhance the performance of PharmacoNet (https://github.com/SeonghwanSeo/PharmacoNet, arxiv: https://arxiv.org/html/2310.00681v3) graph matching + scoring algorithm. They use combinatorial Possible Graph Match (PGM) on a clusetered pharamacore features + used gaussian for scoring. We intended to replace that using end to end simple yet fast deep learning model.
 
-First install this package from source 
+1. First install this package from source 
 ```bash
 conda create -n pmnet python=3.10 -y
 conda activate pmnet
 pip install git+https://github.com/SeonghwanSeo/PharmacoNet.git
 ``` 
+2. Download the artifact folder `.tar.gz` (contains, PDBBind data, cached processed data ready for training and evaluation and some checkpoints) from this link and exract it in a project root. The extracted folder should have the name `artifact`.
 
 #### How to use the CLI
 

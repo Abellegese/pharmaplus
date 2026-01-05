@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pharmaplus.helpers import gaussian_logpdf
 
+
 class NodeEncoder(nn.Module):
   def __init__(self, x_dim: int, d: int, n_types: int = 256, use_score=False):
     super().__init__()
@@ -186,20 +187,20 @@ class PharmMatchNetFast(nn.Module):
     lf = logits_feat.masked_fill(~p_mask[:, None, :], neg)  # [B,L,P]
     topv, topj = torch.topk(lf, k=K, dim=-1)  # [B,L,K]
 
-    # gather p positions for each ligand node's topk: [B,L,K,3]
+    # NOTE:  gather p positions for each ligand node's topk: [B,L,K,3]
     p_exp = p_pos[:, None, :, :].expand(B, L, P, 3)
     topj3 = topj[..., None].expand(B, L, K, 3)
     p_sel = torch.gather(p_exp, dim=2, index=topj3)
 
-    # gather sig nodes: [B,L,K]
+    # NOTE: gather sig nodes: [B,L,K]
     sig_exp = p_sigma[:, None, :].expand(B, L, P)
     sig_sel = torch.gather(sig_exp, dim=2, index=topj)
 
-    # gather logW top: [B,L,K]
+    # NOTE: gather logW top: [B,L,K]
     logW_exp = logW_real
     logW_top = torch.gather(logW_exp, dim=2, index=topj)
 
-    #NOTE: select per pair (a,b): [B,M,K,3] etc
+    # NOTE: select per pair (a,b): [B,M,K,3] etc
     pa = p_sel[bi, a]  # [B,M,K,3]
     pb = p_sel[bi, b]  # [B,M,K,3]
     siga = sig_sel[bi, a]  # [B,M,K]
@@ -207,7 +208,7 @@ class PharmMatchNetFast(nn.Module):
     lwa = logW_top[bi, a]  # [B,M,K]
     lwb = logW_top[bi, b]  # [B,M,K]
 
-    #NOTE: mu distances: [B,M,K,K]
+    # NOTE: mu distances: [B,M,K,K]
     with torch.amp.autocast(device_type=l_pos.device.type, enabled=False):
       mu = torch.norm(pa[:, :, :, None, :] - pb[:, :, None, :, :], dim=-1).float()
     mu = mu.to(logW_real.dtype)
@@ -220,7 +221,7 @@ class PharmMatchNetFast(nn.Module):
     logp = gaussian_logpdf(d, mu, sigma)
     logmix = torch.logsumexp(logw_pair + logp, dim=(-1, -2))  # [B,M]
 
-    #NOTE: average only valid pairs
+    # NOTE: average only valid pairs
     vp = valid_pair.float()
     denom = vp.sum(dim=1).clamp(min=1.0)
     edge_raw = (logmix * vp).sum(dim=1) / denom  # [B]
@@ -229,7 +230,7 @@ class PharmMatchNetFast(nn.Module):
   def pose_term_batch(self, l_pos, p_pos, logW, l_mask, p_mask):
     beta = torch.exp(self.log_beta).clamp(0.01, 10.0)
 
-    #NOTE: drop dustbin for geometry
+    # NOTE: drop dustbin for geometry
     if self.dustbin and (logW.shape[-1] == p_pos.shape[1] + 1):
       logW_real = logW[:, :, :-1]
     else:
@@ -293,7 +294,7 @@ class PharmMatchNetFast(nn.Module):
     sharp, neg_ent = self.invariant_feature_terms_batch(logW, l_mask, p_mask)
     p_sigma = self.pocket_sigma_nodes_batch(hP, p_rad)
 
-    #NOTE: edge uses real pocket columns only 
+    # NOTE: edge uses real pocket columns only
     if self.dustbin and (logW.shape[-1] == p_pos.shape[1] + 1):
       logW_real = logW[:, :, :-1]
     else:
@@ -349,5 +350,3 @@ class PharmMatchNetFast(nn.Module):
     score_pose = stageA["score_inv_geom"] + self.head_pose(pose_vec).squeeze(-1)
     dbg = {"pose_term": pose_t.detach(), "refine_term": ref_t.detach()}
     return score_pose, dbg
-
-

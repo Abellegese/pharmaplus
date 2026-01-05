@@ -8,8 +8,7 @@ from torch.utils.data import DataLoader
 from pharmaplus.helpers import (
   list_pt,
   split_files,
-  _viz_args_to_argv,
-  _render_viz_table
+  viz_args_to_argv,
 )
 from pharmaplus.dataset import PharmCache, collate_pad
 from pharmaplus.model import PharmMatchNetFast
@@ -123,90 +122,94 @@ def load_ckpt(path: Path, map_location: str = "cpu") -> Dict[str, Any]:
 
 
 def _render_viz_rich_table(summary: dict):
-    from rich.table import Table
-    from rich.text import Text
+  from rich.table import Table
+  from rich.text import Text
 
-    lam = summary.get("ranking", {}).get("lambda_retr", None)
-    gt = summary.get("GT", {}) or {}
-    tops = summary.get("top_conformers", []) or []
-    other = summary.get("other", None)
+  lam = summary.get("ranking", {}).get("lambda_retr", None)
+  gt = summary.get("GT", {}) or {}
+  tops = summary.get("top_conformers", []) or []
+  other = summary.get("other", None)
 
-    def row(name: str, conf_id: object, block: dict) -> dict:
-        inv_terms = block.get("inv_terms", {}) or {}
-        pose_terms = block.get("pose_terms", {}) or {}
-        return {
-            "name": name,
-            "conf_id": conf_id,
-            "inv": block.get("score_inv_geom", None),
-            "retr": block.get("retr_sim", None),
-            "sretr": block.get("score_retr", None),
-            "pose": block.get("pose_aligned", None),
-            "sharp": inv_terms.get("sharp", None),
-            "neg_ent": inv_terms.get("neg_ent", None),
-            "edge": inv_terms.get("edge", None),
-            "pose_t": pose_terms.get("pose", None),
-            "ref_t": pose_terms.get("ref", None),
-        }
+  def row(name: str, conf_id: object, block: dict) -> dict:
+    inv_terms = block.get("inv_terms", {}) or {}
+    pose_terms = block.get("pose_terms", {}) or {}
+    return {
+      "name": name,
+      "conf_id": conf_id,
+      "inv": block.get("score_inv_geom", None),
+      "retr": block.get("retr_sim", None),
+      "sretr": block.get("score_retr", None),
+      "pose": block.get("pose_aligned", None),
+      "sharp": inv_terms.get("sharp", None),
+      "neg_ent": inv_terms.get("neg_ent", None),
+      "edge": inv_terms.get("edge", None),
+      "pose_t": pose_terms.get("pose", None),
+      "ref_t": pose_terms.get("ref", None),
+    }
 
-    rows = [row("GT", "-", gt)]
-    if len(tops) >= 1:
-        rows.append(row("Conf1", tops[0].get("conf_id", "-"), tops[0]))
-    if len(tops) >= 2:
-        rows.append(row("Conf2", tops[1].get("conf_id", "-"), tops[1]))
-    if other and isinstance(other, dict):
-        best = other.get("best", {}) or {}
-        rows.append(row("Other(best)", other.get("best_conf", "-"), best))
+  rows = [row("GT", "-", gt)]
+  if len(tops) >= 1:
+    rows.append(row("Conf1", tops[0].get("conf_id", "-"), tops[0]))
+  if len(tops) >= 2:
+    rows.append(row("Conf2", tops[1].get("conf_id", "-"), tops[1]))
+  if other and isinstance(other, dict):
+    best = other.get("best", {}) or {}
+    rows.append(row("Other(best)", other.get("best_conf", "-"), best))
 
-    sretrs = [r["sretr"] for r in rows if isinstance(r.get("sretr"), (int, float))]
-    best_sretr = max(sretrs) if sretrs else None
+  sretrs = [r["sretr"] for r in rows if isinstance(r.get("sretr"), (int, float))]
+  best_sretr = max(sretrs) if sretrs else None
 
-    def fmt(x: object, nd: int = 4) -> str:
-        if x is None:
-            return "-"
-        try:
-            return f"{float(x):.{nd}f}"
-        except Exception:
-            return str(x)
+  def fmt(x: object, nd: int = 4) -> str:
+    if x is None:
+      return "-"
+    try:
+      return f"{float(x):.{nd}f}"
+    except Exception:
+      return str(x)
 
-    title = f"Visualization Summary (lambda_retr={fmt(lam, 3)})"
+  title = f"Visualization Summary (lambda_retr={fmt(lam, 3)})"
 
-    table = Table(title=title, show_lines=False, header_style="bold")
-    table.add_column("Candidate", style="bold")
-    table.add_column("conf_id", justify="right")
-    table.add_column("score_inv_geom", justify="right")
-    table.add_column("retr_sim", justify="right")
-    table.add_column("score_retr", justify="right")
-    table.add_column("pose_aligned", justify="right")
-    table.add_column("sharp", justify="right")
-    table.add_column("-ent", justify="right")
-    table.add_column("edge", justify="right")
-    table.add_column("pose_term", justify="right")
-    table.add_column("ref_term", justify="right")
+  table = Table(title=title, show_lines=False, header_style="bold")
+  table.add_column("Candidate", style="bold")
+  table.add_column("conf_id", justify="right")
+  table.add_column("score_inv_geom", justify="right")
+  table.add_column("retr_sim", justify="right")
+  table.add_column("score_retr", justify="right")
+  table.add_column("pose_aligned", justify="right")
+  table.add_column("sharp", justify="right")
+  table.add_column("-ent", justify="right")
+  table.add_column("edge", justify="right")
+  table.add_column("pose_term", justify="right")
+  table.add_column("ref_term", justify="right")
 
-    for r in rows:
-        sretr_val = r["sretr"]
-        sretr_text = Text(fmt(sretr_val, 4))
+  for r in rows:
+    sretr_val = r["sretr"]
+    sretr_text = Text(fmt(sretr_val, 4))
 
-        if best_sretr is not None and isinstance(sretr_val, (int, float)) and abs(sretr_val - best_sretr) < 1e-12:
-            sretr_text.stylize("bold bright_green")
-        elif isinstance(sretr_val, (int, float)):
-            sretr_text.stylize("bright_white")
+    if (
+      best_sretr is not None
+      and isinstance(sretr_val, (int, float))
+      and abs(sretr_val - best_sretr) < 1e-12
+    ):
+      sretr_text.stylize("bold bright_green")
+    elif isinstance(sretr_val, (int, float)):
+      sretr_text.stylize("bright_white")
 
-        table.add_row(
-            r["name"],
-            str(r["conf_id"]),
-            fmt(r["inv"], 4),
-            fmt(r["retr"], 4),
-            sretr_text,
-            fmt(r["pose"], 4),
-            fmt(r["sharp"], 4),
-            fmt(r["neg_ent"], 4),
-            fmt(r["edge"], 4),
-            fmt(r["pose_t"], 4),
-            fmt(r["ref_t"], 4),
-        )
+    table.add_row(
+      r["name"],
+      str(r["conf_id"]),
+      fmt(r["inv"], 4),
+      fmt(r["retr"], 4),
+      sretr_text,
+      fmt(r["pose"], 4),
+      fmt(r["sharp"], 4),
+      fmt(r["neg_ent"], 4),
+      fmt(r["edge"], 4),
+      fmt(r["pose_t"], 4),
+      fmt(r["ref_t"], 4),
+    )
 
-    return table
+  return table
 
 
 def cmd_train(args: argparse.Namespace) -> int:
@@ -366,38 +369,21 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 
 def cmd_visualize(args: argparse.Namespace) -> int:
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+  out_dir = Path(args.out_dir)
+  out_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.device == "auto":
-        args.device = "cuda" if torch.cuda.is_available() else "cpu"
+  if args.device == "auto":
+    args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    old_argv = sys.argv[:]
-    try:
-        sys.argv = ["pharmaplus-visualize"] + _viz_args_to_argv(args)
-        visualzie.main()
-    finally:
-        sys.argv = old_argv
+  old_argv = sys.argv[:]
+  try:
+    sys.argv = ["pharmaplus-visualize"] + viz_args_to_argv(args)
+    visualzie.main()
+  finally:
+    sys.argv = old_argv
 
-    scores_path = out_dir / "scores.json"
-    if not scores_path.exists():
-        raise SystemExit(f"[error] visualize did not produce {scores_path}")
+  return 0
 
-    summary = json.loads(scores_path.read_text())
-
-    try:
-        from rich.console import Console
-        console = Console()
-        console.print(_render_viz_rich_table(summary))
-
-        console.print()
-        console.print("[bold]PyMOL:[/bold]")
-        console.print(f"  pymol {str(out_dir / 'view_matches.pml')}")
-    except ImportError:
-        print("[warn] rich is not installed; falling back to plain text.")
-        print(json.dumps(summary, indent=2))
-
-    return 0
 
 def add_common_data_args(p: argparse.ArgumentParser) -> None:
   g = p.add_argument_group("data")
@@ -515,19 +501,27 @@ def build_parser() -> argparse.ArgumentParser:
   g.add_argument("--json", action="store_true", help="Print metrics as JSON")
 
   p_viz = sub.add_parser(
-      "visualize",
-      help="Run inference + write PyMOL assets, then print a comparison table",
-      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    "visualize",
+    help="Run inference + write PyMOL assets, then print a comparison table",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
   )
 
   g = p_viz.add_argument_group("inputs")
   g.add_argument("--ckpt", required=True, help="Checkpoint path (.pt)")
-  g.add_argument("--item-pt", dest="item_pt", required=True, help="Cache item .pt to visualize")
-  g.add_argument("--other-dir", dest="other_dir", default=None,
-                  help="Optional other cache item to take a different ligand (SMILES)")
+  g.add_argument(
+    "--item-pt", dest="item_pt", required=True, help="Cache item .pt to visualize"
+  )
+  g.add_argument(
+    "--other-dir",
+    dest="other_dir",
+    default=None,
+    help="Optional other cache item to take a different ligand (SMILES)",
+  )
 
   g = p_viz.add_argument_group("runtime")
-  g.add_argument("--device", default="auto", help='Device like "auto", "cpu", "cuda", "cuda:0"')
+  g.add_argument(
+    "--device", default="auto", help='Device like "auto", "cpu", "cuda", "cuda:0"'
+  )
   g.add_argument("--amp", action="store_true")
 
   g = p_viz.add_argument_group("conformers")
@@ -538,10 +532,23 @@ def build_parser() -> argparse.ArgumentParser:
   g.add_argument("--max-lig-nodes", dest="max_lig_nodes", type=int, default=48)
 
   g = p_viz.add_argument_group("ranking / overrides")
-  g.add_argument("--topk", type=int, default=None, help="Override topk (default: ckpt args)")
-  g.add_argument("--edge-pairs", dest="edge_pairs", type=int, default=None, help="Override edge_pairs (default: ckpt args)")
-  g.add_argument("--lambda-retr", dest="lambda_retr", type=float, default=0.8,
-                  help="score_retr = score_inv_geom + lambda_retr * retr_sim")
+  g.add_argument(
+    "--topk", type=int, default=None, help="Override topk (default: ckpt args)"
+  )
+  g.add_argument(
+    "--edge-pairs",
+    dest="edge_pairs",
+    type=int,
+    default=None,
+    help="Override edge_pairs (default: ckpt args)",
+  )
+  g.add_argument(
+    "--lambda-retr",
+    dest="lambda_retr",
+    type=float,
+    default=0.8,
+    help="score_retr = score_inv_geom + lambda_retr * retr_sim",
+  )
 
   g = p_viz.add_argument_group("match lines")
   g.add_argument("--match-topn", dest="match_topn", type=int, default=50)
@@ -555,9 +562,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   if args.cmd == "visualize":
-      if args.device == "auto":
-          args.device = "cuda" if torch.cuda.is_available() else "cpu"
-      return cmd_visualize(args)
+    if args.device == "auto":
+      args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    return cmd_visualize(args)
 
   if args.cmd == "train":
     return cmd_train(args)

@@ -1,7 +1,25 @@
-import argparse, math, random, torch
+import argparse, math, os, random, torch
 from pathlib import Path
+from typing import Any, Optional, Dict, List, Tuple
+from rdkit.Chem import ChemicalFeatures
+from rdkit import RDConfig
 
 LOG_2PI = math.log(2.0 * math.pi)
+
+
+_FDEF = os.path.join(RDConfig.RDDataDir, "BaseFeatures.fdef")
+_RDKIT_FACTORY = ChemicalFeatures.BuildFeatureFactory(_FDEF)
+
+FAMILY_TO_TYP = {
+  "Donor": 0,
+  "Acceptor": 1,
+  "Aromatic": 2,
+  "Hydrophobe": 3,
+  "LumpedHydrophobe": 3,
+  "PosIonizable": 4,
+  "NegIonizable": 5,
+  "Halogen": 7,
+}
 
 
 def safe_torch_load(fp: Path):
@@ -125,93 +143,6 @@ def _fmt(x: object, nd: int = 4) -> str:
     return str(x)
 
 
-def _render_viz_table(summary: dict) -> str:
-  """
-  Build a Markdown table comparing GT vs top conformers (and optional other).
-  """
-  lam = summary.get("ranking", {}).get("lambda_retr", None)
-
-  gt = summary.get("GT", {}) or {}
-  tops = summary.get("top_conformers", []) or []
-  other = summary.get("other", None)
-
-  def row(name: str, conf_id: object, block: dict) -> dict:
-    inv_terms = block.get("inv_terms", {}) or {}
-    pose_terms = block.get("pose_terms", {}) or {}
-    return {
-      "name": name,
-      "conf_id": conf_id,
-      "inv": block.get("score_inv_geom", None),
-      "retr": block.get("retr_sim", None),
-      "sretr": block.get("score_retr", None),
-      "pose": block.get("pose_aligned", None),
-      "sharp": inv_terms.get("sharp", None),
-      "neg_ent": inv_terms.get("neg_ent", None),
-      "edge": inv_terms.get("edge", None),
-      "pose_t": pose_terms.get("pose", None),
-      "ref_t": pose_terms.get("ref", None),
-    }
-
-  rows = []
-  rows.append(row("GT", "-", gt))
-  if len(tops) >= 1:
-    rows.append(row("Conf1", tops[0].get("conf_id", "-"), tops[0]))
-  if len(tops) >= 2:
-    rows.append(row("Conf2", tops[1].get("conf_id", "-"), tops[1]))
-
-  if other and isinstance(other, dict):
-    best = other.get("best", {}) or {}
-    rows.append(row("Other(best)", other.get("best_conf", "-"), best))
-
-  # find best score_retr among rows (ignore None)
-  sretrs = [r["sretr"] for r in rows if isinstance(r.get("sretr", None), (int, float))]
-  best_sretr = max(sretrs) if sretrs else None
-
-  def maybe_bold(val: object) -> str:
-    s = _fmt(val, 4)
-    if (
-      best_sretr is not None
-      and isinstance(val, (int, float))
-      and abs(val - best_sretr) < 1e-12
-    ):
-      return f"**{s}**"
-    return s
-
-  header = []
-  header.append(
-    f"**lambda_retr** = {_fmt(lam, 3)}  (score_retr = inv + lambda_retr * retr_sim)"
-  )
-  header.append(f"item_pt: `{summary.get('item_pt', '')}`")
-  header.append(f"ckpt: `{summary.get('ckpt_args', {})}`")
-
-  md = []
-  md.append("\n".join(header))
-  md.append("")
-  md.append(
-    "| Candidate | conf_id | score_inv_geom | retr_sim | score_retr | pose_aligned | sharp | -ent | edge | pose_term | ref_term |"
-  )
-  md.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
-
-  for r in rows:
-    md.append(
-      "| {name} | {conf_id} | {inv} | {retr} | {sretr} | {pose} | {sharp} | {neg_ent} | {edge} | {pose_t} | {ref_t} |".format(
-        name=r["name"],
-        conf_id=r["conf_id"],
-        inv=_fmt(r["inv"], 4),
-        retr=_fmt(r["retr"], 4),
-        sretr=maybe_bold(r["sretr"]),
-        pose=_fmt(r["pose"], 4),
-        sharp=_fmt(r["sharp"], 4),
-        neg_ent=_fmt(r["neg_ent"], 4),
-        edge=_fmt(r["edge"], 4),
-        pose_t=_fmt(r["pose_t"], 4),
-        ref_t=_fmt(r["ref_t"], 4),
-      )
-    )
-
-  return "\n".join(md)
-
-
 def _fmt(x: object, nd: int = 4) -> str:
   if x is None:
     return "-"
@@ -221,93 +152,7 @@ def _fmt(x: object, nd: int = 4) -> str:
     return str(x)
 
 
-def _render_viz_table(summary: dict) -> str:
-  """
-  Build a Markdown table comparing GT vs top conformers (and optional other).
-  """
-  lam = summary.get("ranking", {}).get("lambda_retr", None)
-
-  gt = summary.get("GT", {}) or {}
-  tops = summary.get("top_conformers", []) or []
-  other = summary.get("other", None)
-
-  def row(name: str, conf_id: object, block: dict) -> dict:
-    inv_terms = block.get("inv_terms", {}) or {}
-    pose_terms = block.get("pose_terms", {}) or {}
-    return {
-      "name": name,
-      "conf_id": conf_id,
-      "inv": block.get("score_inv_geom", None),
-      "retr": block.get("retr_sim", None),
-      "sretr": block.get("score_retr", None),
-      "pose": block.get("pose_aligned", None),
-      "sharp": inv_terms.get("sharp", None),
-      "neg_ent": inv_terms.get("neg_ent", None),
-      "edge": inv_terms.get("edge", None),
-      "pose_t": pose_terms.get("pose", None),
-      "ref_t": pose_terms.get("ref", None),
-    }
-
-  rows = []
-  rows.append(row("GT", "-", gt))
-  if len(tops) >= 1:
-    rows.append(row("Conf1", tops[0].get("conf_id", "-"), tops[0]))
-  if len(tops) >= 2:
-    rows.append(row("Conf2", tops[1].get("conf_id", "-"), tops[1]))
-
-  if other and isinstance(other, dict):
-    best = other.get("best", {}) or {}
-    rows.append(row("Other(best)", other.get("best_conf", "-"), best))
-
-  sretrs = [r["sretr"] for r in rows if isinstance(r.get("sretr", None), (int, float))]
-  best_sretr = max(sretrs) if sretrs else None
-
-  def maybe_bold(val: object) -> str:
-    s = _fmt(val, 4)
-    if (
-      best_sretr is not None
-      and isinstance(val, (int, float))
-      and abs(val - best_sretr) < 1e-12
-    ):
-      return f"**{s}**"
-    return s
-
-  header = []
-  header.append(
-    f"**lambda_retr** = {_fmt(lam, 3)}  (score_retr = inv + lambda_retr * retr_sim)"
-  )
-  header.append(f"item_pt: `{summary.get('item_pt', '')}`")
-  header.append(f"ckpt: `{summary.get('ckpt_args', {})}`")
-
-  md = []
-  md.append("\n".join(header))
-  md.append("")
-  md.append(
-    "| Candidate | conf_id | score_inv_geom | retr_sim | score_retr | pose_aligned | sharp | -ent | edge | pose_term | ref_term |"
-  )
-  md.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
-
-  for r in rows:
-    md.append(
-      "| {name} | {conf_id} | {inv} | {retr} | {sretr} | {pose} | {sharp} | {neg_ent} | {edge} | {pose_t} | {ref_t} |".format(
-        name=r["name"],
-        conf_id=r["conf_id"],
-        inv=_fmt(r["inv"], 4),
-        retr=_fmt(r["retr"], 4),
-        sretr=maybe_bold(r["sretr"]),
-        pose=_fmt(r["pose"], 4),
-        sharp=_fmt(r["sharp"], 4),
-        neg_ent=_fmt(r["neg_ent"], 4),
-        edge=_fmt(r["edge"], 4),
-        pose_t=_fmt(r["pose_t"], 4),
-        ref_t=_fmt(r["ref_t"], 4),
-      )
-    )
-
-  return "\n".join(md)
-
-
-def _viz_args_to_argv(args: argparse.Namespace) -> list[str]:
+def viz_args_to_argv(args: argparse.Namespace) -> list[str]:
   argv: list[str] = []
   argv += ["--ckpt", str(args.ckpt)]
   argv += ["--item_pt", str(args.item_pt)]
@@ -330,3 +175,91 @@ def _viz_args_to_argv(args: argparse.Namespace) -> list[str]:
   argv += ["--lambda_retr", str(args.lambda_retr)]
   argv += ["--out_dir", str(args.out_dir)]
   return argv
+
+
+def print_batch_results_rich_table(
+  results: List[Tuple[float, Path, Optional[Path], Dict[str, Any]]],
+  *,
+  top_n: Optional[int] = None,
+  title: str = "Batch compare (other ligands on same pocket)",
+) -> None:
+  from rich.console import Console
+  from rich.table import Table
+  from rich.text import Text
+
+  console = Console()
+
+  if not results:
+    console.print("[yellow]No results to display.[/yellow]")
+    return
+
+  rows = results[:top_n] if (top_n is not None and top_n > 0) else results
+
+  scores = []
+  for sretr, _pt, _sdf, best in rows:
+    if (
+      isinstance(best, dict) and "error" not in best and isinstance(sretr, (int, float))
+    ):
+      scores.append(float(sretr))
+  best_score = max(scores) if scores else None
+
+  def fmt(x: Any, nd: int = 4) -> str:
+    if x is None:
+      return "-"
+    try:
+      return f"{float(x):.{nd}f}"
+    except Exception:
+      return str(x)
+
+  table = Table(title=title, header_style="bold", show_lines=False)
+  table.add_column("Rank", justify="right")
+  table.add_column("Ligand path")
+  table.add_column("best_conf", justify="right")
+  table.add_column("score_inv_geom", justify="right")
+  table.add_column("retr_sim", justify="right")
+  table.add_column("score_retr", justify="right")
+  table.add_column("sharp", justify="right")
+  table.add_column("-ent", justify="right")
+  table.add_column("edge", justify="right")
+  table.add_column("status")
+
+  for i, (sretr, pt, _sdf, best) in enumerate(rows, start=1):
+    if isinstance(best, dict) and "error" in best:
+      table.add_row(
+        str(i),
+        str(pt),
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        Text("ERROR", style="bold red"),
+      )
+      continue
+
+    inv_terms = (best.get("inv_terms", {}) or {}) if isinstance(best, dict) else {}
+    sretr_text = Text(fmt(best.get("score_retr", sretr), 4))
+
+    if (
+      best_score is not None
+      and isinstance(sretr, (int, float))
+      and abs(float(sretr) - float(best_score)) < 1e-12
+    ):
+      sretr_text.stylize("bold bright_green")
+
+    table.add_row(
+      str(i),
+      str(pt),
+      str(best.get("best_conf", "-")),
+      fmt(best.get("score_inv_geom", None), 4),
+      fmt(best.get("retr_sim", None), 4),
+      sretr_text,
+      fmt(inv_terms.get("sharp", None), 4),
+      fmt(inv_terms.get("neg_ent", None), 4),
+      fmt(inv_terms.get("edge", None), 4),
+      Text("OK", style="green"),
+    )
+
+  console.print(table)

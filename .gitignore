@@ -3,7 +3,10 @@ __pycache__/
 *.py[oc]
 build/
 dist/
+out/
 wheels/
+artifacts/
+artifacts.tar.gz
 *.egg-info
 
 # Virtual environments
