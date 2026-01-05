@@ -7,7 +7,7 @@ conda create -n pmnet python=3.10 -y
 conda activate pmnet
 pip install git+https://github.com/SeonghwanSeo/PharmacoNet.git
 ``` 
-2. Download the artifact folder `.tar.gz` (contains, PDBBind data, cached processed data ready for training and evaluation and some checkpoints) from this link and exract it in a project root. The extracted folder should have the name `artifact`.
+2. Download the artifact folder `.tar.gz` (contains, PDBBind data, cached processed data ready for training and evaluation and some checkpoints) from this link (https://drive.google.com/file/d/1MizWjA7lct1ZLVo-ZJ0_1B-f0k4_0JkX/view?usp=sharing) and exract it in a project root. The extracted folder should have the name `artifact`.
 
 3. Quickly run this to evaluate
 ```bash
