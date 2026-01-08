@@ -406,6 +406,7 @@ def add_common_runtime_args(p: argparse.ArgumentParser) -> None:
   )
   g.add_argument("--amp", action="store_true")
   g.add_argument("--compile", action="store_true")
+  g.add_argument("--enable-pose", action="store_true")
   g.add_argument(
     "--deterministic", action="store_true", help="Enable deterministic CuDNN (slower)"
   )

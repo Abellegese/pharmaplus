@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from pharmaplus.dude_cache_io import load_item_paths as load_item_paths_dude
 
 from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
@@ -80,7 +81,7 @@ def lig_pharm_from_mol(
 def read_pose_and_smiles_from_sdf(
   sdf_path: Path, which_record: int = 0
 ) -> Tuple[Chem.Mol, str]:
-  sdf_path = os.path.join("artifacts/data", sdf_path)
+  # sdf_path = os.path.join("artifacts/data", sdf_path)
   suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
   mols = [m for m in suppl if m is not None]
   if not mols:
@@ -134,15 +135,21 @@ def safe_torch_load(fp: Path):
     return torch.load(fp, map_location="cpu")
 
 
-def load_item_paths(item_pt: Path) -> Tuple[Path, Path]:
-  data = safe_torch_load(item_pt)
-  meta = data.get("meta", {})
-  lig = meta.get("ligand_file", None)
-  prot = meta.get("protein_file", None)
-  if lig is None or prot is None:
-    raise ValueError(f"{item_pt} meta must include ligand_file and protein_file")
-  return Path(prot), Path(lig)
+# def load_item_paths(item_pt: Path) -> Tuple[Path, Path]:
+#   data = safe_torch_load(item_pt)
+#   meta = data.get("meta", {})
+#   lig = meta.get("ligand_file", None)
+#   prot = meta.get("protein_file", None)
+#   if lig is None or prot is None:
+#     raise ValueError(f"{item_pt} meta must include ligand_file and protein_file")
+#   return Path(prot), Path(lig)
 
+def load_item_paths(item_pt: Path):
+    # If your visualize pipeline already has an --optimize flag, it’s usually safe to embed when missing.
+    # Set embed_if_missing=True to avoid crashing on ligands without coordinates.
+    protein_pdb, ligand_sdf = load_item_paths_dude(item_pt, embed_if_missing=True)
+    print("Resolved item paths: protein=%s ligand_sdf=%s", protein_pdb, ligand_sdf)
+    return protein_pdb, ligand_sdf
 
 def load_pocket_from_item(item_pt: Path) -> Dict[str, torch.Tensor]:
   data = safe_torch_load(item_pt)
